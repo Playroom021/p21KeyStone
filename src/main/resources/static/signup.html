@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign up — AuthApp</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand">auth<span>app</span></div>
+    <div class="topbar-links"><a href="/login.html">Log in</a></div>
+</div>
+
+<main>
+    <div class="panel">
+        <h1>Create account</h1>
+        <p class="sub">Pick the role that matches how you'll use the app.</p>
+
+        <div id="msg" class="msg"></div>
+
+        <form id="signupForm">
+            <div class="field">
+                <label for="fullName">Full name</label>
+                <input type="text" id="fullName" required autocomplete="name">
+            </div>
+            <div class="field">
+                <label for="email">Email</label>
+                <input type="email" id="email" required autocomplete="email">
+            </div>
+            <div class="field">
+                <label for="password">Password</label>
+                <input type="password" id="password" required minlength="6" autocomplete="new-password">
+            </div>
+            <div class="field">
+                <label for="role">Role</label>
+                <select id="role" required>
+                    <option value="" disabled selected>Select a role</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="TECHNICIAN">Technician</option>
+                    <option value="DISPATCHER">Dispatcher</option>
+                </select>
+            </div>
+            <div class="field" id="companyField" style="display:none;">
+                <label for="companyName">Company name</label>
+                <input type="text" id="companyName" autocomplete="organization" placeholder="e.g. ABC Office Pvt Ltd">
+            </div>
+            <button type="submit" class="primary" id="submitBtn">Create account</button>
+        </form>
+
+        <div class="alt-link">Already have an account? <a href="/login.html">Log in</a></div>
+    </div>
+</main>
+
+<script src="/js/auth.js"></script>
+<script>
+    if (getToken()) window.location.href = homeUrlForRole(getStoredUser().role);
+
+    const form = document.getElementById('signupForm');
+    const msg = document.getElementById('msg');
+    const btn = document.getElementById('submitBtn');
+    const roleSelect = document.getElementById('role');
+    const companyField = document.getElementById('companyField');
+    const companyInput = document.getElementById('companyName');
+
+    roleSelect.addEventListener('change', () => {
+        const isCustomer = roleSelect.value === 'CUSTOMER';
+        companyField.style.display = isCustomer ? 'block' : 'none';
+        companyInput.required = isCustomer;
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        msg.className = 'msg';
+        btn.disabled = true;
+        btn.textContent = 'Creating account…';
+
+        try {
+            const res = await fetch('/api/auth/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fullName: document.getElementById('fullName').value.trim(),
+                    email: document.getElementById('email').value.trim(),
+                    password: document.getElementById('password').value,
+                    role: roleSelect.value,
+                    companyName: companyInput.value.trim()
+                })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                msg.textContent = data.message || 'Could not create account';
+                msg.className = 'msg error';
+                return;
+            }
+
+            saveSession(data);
+            window.location.href = homeUrlForRole(data.role);
+        } catch (err) {
+            msg.textContent = 'Could not reach the server. Try again.';
+            msg.className = 'msg error';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Create account';
+        }
+    });
+</script>
+
+</body>
+</html>

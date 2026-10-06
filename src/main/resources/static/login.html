@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log in — AuthApp</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand">auth<span>app</span></div>
+    <div class="topbar-links"><a href="/signup.html">Create account</a></div>
+</div>
+
+<main>
+    <div class="panel">
+        <h1>Log in</h1>
+        <p class="sub">Manager, customer, worker or developer — one gate for all four.</p>
+
+        <div id="msg" class="msg"></div>
+
+        <form id="loginForm">
+            <div class="field">
+                <label for="email">Email</label>
+                <input type="email" id="email" required autocomplete="email">
+            </div>
+            <div class="field">
+                <label for="password">Password</label>
+                <input type="password" id="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="primary" id="submitBtn">Log in</button>
+        </form>
+
+        <div class="alt-link">No account yet? <a href="/signup.html">Sign up</a></div>
+    </div>
+</main>
+
+<script src="/js/auth.js"></script>
+<script>
+    if (getToken()) window.location.href = homeUrlForRole(getStoredUser().role);
+
+    const form = document.getElementById('loginForm');
+    const msg = document.getElementById('msg');
+    const btn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        msg.className = 'msg';
+        btn.disabled = true;
+        btn.textContent = 'Logging in…';
+
+        try {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value.trim(),
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                msg.textContent = data.message || 'Login failed';
+                msg.className = 'msg error';
+                return;
+            }
+
+            saveSession(data);
+            window.location.href = homeUrlForRole(data.role);
+        } catch (err) {
+            msg.textContent = 'Could not reach the server. Try again.';
+            msg.className = 'msg error';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Log in';
+        }
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AuthApp</title>
+<script src="/js/auth.js"></script>
+<script>
+    const u = getStoredUser();
+    window.location.href = (getToken() && u) ? homeUrlForRole(u.role) : '/login.html';
+</script>
+</head>
+<body></body>
+</html>
