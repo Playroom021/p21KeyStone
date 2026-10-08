@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — AuthApp</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand">auth<span>app</span></div>
+    <div class="topbar-links">
+        <span id="roleTag" class="role-tag"></span>
+        <button class="logout-btn" id="logoutBtn">Log out</button>
+    </div>
+</div>
+
+<main>
+    <div class="dash-wrap">
+        <div class="dash-card">
+            <div class="label">SESSION</div>
+            <h2 id="welcomeText">Welcome</h2>
+            <p id="roleMessage">Loading your dashboard…</p>
+            <dl class="kv">
+                <dt>Name</dt><dd id="kvName">—</dd>
+                <dt>Email</dt><dd id="kvEmail">—</dd>
+                <dt>Role</dt><dd id="kvRole">—</dd>
+            </dl>
+        </div>
+
+        <div class="dash-card">
+            <div class="label">ABOUT THIS VIEW</div>
+            <p>This panel is served by a role-gated API endpoint — the backend, not just the UI,
+            checks your JWT's role claim before returning it. Swap this card's content per role
+            (job queue, ticket list, work orders, deploy status, etc.) as you build out the app.</p>
+        </div>
+    </div>
+</main>
+
+<script src="/js/auth.js"></script>
+<script>
+    if (!requireAuthOrRedirect()) { /* redirected */ }
+
+    const user = getStoredUser();
+    if (user.role === 'LOCAL_CUSTOMER') {
+        window.location.href = '/customer-portal.html';
+    }
+    document.getElementById('kvName').textContent = user.fullName;
+    document.getElementById('kvEmail').textContent = user.email;
+    document.getElementById('kvRole').textContent = roleLabel(user.role);
+    document.getElementById('roleTag').textContent = roleLabel(user.role);
+    document.getElementById('welcomeText').textContent = 'Welcome, ' + user.fullName;
+
+    const roleEndpoints = {
+        MANAGER: '/api/dashboard/manager',
+        LOCAL_CUSTOMER: '/api/dashboard/customer',
+        LOCAL_WORKER: '/api/dashboard/worker',
+        DEVELOPER: '/api/dashboard/developer'
+    };
+
+    (async () => {
+        try {
+            const res = await authFetch(roleEndpoints[user.role]);
+            const data = await res.json();
+            document.getElementById('roleMessage').textContent = data.message;
+        } catch (e) {
+            document.getElementById('roleMessage').textContent = 'Could not load role data.';
+        }
+    })();
+
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+</script>
+
+</body>
+</html>

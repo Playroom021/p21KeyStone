@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Portal — AuthApp</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand">auth<span>app</span></div>
+    <div class="topbar-links">
+        <span id="companyTag" class="role-tag"></span>
+        <button class="logout-btn" id="logoutBtn">Log out</button>
+    </div>
+</div>
+
+<main>
+<div class="portal-wrap">
+
+    <div class="dash-card">
+        <div class="label">CUSTOMER PORTAL</div>
+        <h2 id="welcomeText">Welcome</h2>
+        <p>Raise a service request, pick the site it's for, and track every work order through to close —
+        only for your own account. Nothing here is visible to any other customer.</p>
+    </div>
+
+    <div class="portal-grid two-col">
+
+        <!-- Raise a service request -->
+        <div class="dash-card">
+            <div class="section-title">Raise a service request</div>
+            <div id="raiseMsg" class="msg"></div>
+            <form id="raiseForm">
+                <div class="field">
+                    <label for="siteSelect">Site</label>
+                    <select id="siteSelect" required>
+                        <option value="" disabled selected>Select a site…</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="woTitle">Title</label>
+                    <input type="text" id="woTitle" required placeholder="e.g. AC not cooling">
+                </div>
+                <div class="field">
+                    <label for="woDescription">Description (optional)</label>
+                    <textarea id="woDescription" placeholder="Any extra detail that helps the technician"></textarea>
+                </div>
+                <div class="field">
+                    <label for="woPriority">Priority</label>
+                    <select id="woPriority" required>
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM" selected>Medium</option>
+                        <option value="HIGH">High</option>
+                        <option value="CRITICAL">Critical</option>
+                    </select>
+                </div>
+                <button type="submit" class="primary" id="raiseBtn">Submit request</button>
+            </form>
+        </div>
+
+        <!-- Sites -->
+        <div class="dash-card">
+            <div class="section-title">Your sites</div>
+            <div id="siteMsg" class="msg"></div>
+            <div id="sitesList" class="empty-note">Loading sites…</div>
+
+            <div class="section-title">Add a site</div>
+            <form id="siteForm">
+                <div class="field">
+                    <label for="siteName">Site name</label>
+                    <input type="text" id="siteName" required placeholder="e.g. Noida Office">
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label for="siteAddress">Address</label>
+                        <input type="text" id="siteAddress" placeholder="Street / building">
+                    </div>
+                    <div class="field">
+                        <label for="siteCity">City</label>
+                        <input type="text" id="siteCity" placeholder="City">
+                    </div>
+                </div>
+                <button type="submit" class="secondary" id="siteBtn">Add site</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Work orders -->
+    <div class="dash-card">
+        <div class="section-title">Your work orders</div>
+        <div id="woListWrap">
+            <div class="empty-note">Loading work orders…</div>
+        </div>
+    </div>
+
+</div>
+</main>
+
+<!-- Work order detail overlay -->
+<div class="overlay" id="detailOverlay">
+    <div class="overlay-panel">
+        <button class="close-x" id="closeDetail">✕</button>
+        <div id="detailContent"><div class="empty-note">Loading…</div></div>
+    </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+    if (!requireAuthOrRedirect()) { /* redirected */ }
+    const user = getStoredUser();
+    if (user.role !== 'LOCAL_CUSTOMER') {
+        window.location.href = homeUrlForRole(user.role);
+    }
+
+    document.getElementById('companyTag').textContent = user.companyName || 'Customer';
+    document.getElementById('welcomeText').textContent = 'Welcome, ' + (user.companyName || user.fullName);
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+
+    const PRIORITY_LABEL = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High', CRITICAL: 'Critical' };
+    const STATUS_LABEL = {
+        NEW: 'New', ASSIGNED: 'Assigned', IN_PROGRESS: 'In progress',
+        ON_HOLD: 'On hold', RESOLVED: 'Resolved', CLOSED: 'Closed', CANCELLED: 'Cancelled'
+    };
+
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function badge(kind, value) {
+        return `<span class="badge badge-${kind}-${value}">${kind === 'status' ? STATUS_LABEL[value] : PRIORITY_LABEL[value]}</span>`;
+    }
+
+    // ---- Sites ----
+    let sitesCache = [];
+
+    async function loadSites() {
+        const res = await authFetch('/api/customer/sites');
+        sitesCache = await res.json();
+
+        const listEl = document.getElementById('sitesList');
+        if (sitesCache.length === 0) {
+            listEl.innerHTML = '<div class="empty-note">No sites yet — add one below to raise your first request.</div>';
+        } else {
+            listEl.innerHTML = sitesCache.map(s =>
+                `<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+                    <strong>${escapeHtml(s.name)}</strong><br>
+                    <span style="color:var(--text-dim);font-size:0.85rem;">${escapeHtml([s.addressLine, s.city].filter(Boolean).join(', ') || 'No address on file')}</span>
+                 </div>`
+            ).join('');
+        }
+
+        const select = document.getElementById('siteSelect');
+        const current = select.value;
+        select.innerHTML = '<option value="" disabled ' + (current ? '' : 'selected') + '>Select a site…</option>' +
+            sitesCache.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    }
+
+    document.getElementById('siteForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('siteMsg');
+        const btn = document.getElementById('siteBtn');
+        msg.className = 'msg';
+        btn.disabled = true;
+
+        try {
+            const res = await authFetch('/api/customer/sites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: document.getElementById('siteName').value.trim(),
+                    addressLine: document.getElementById('siteAddress').value.trim(),
+                    city: document.getElementById('siteCity').value.trim()
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                msg.textContent = data.message || 'Could not add site';
+                msg.className = 'msg error';
+                return;
+            }
+            document.getElementById('siteForm').reset();
+            msg.textContent = 'Site added.';
+            msg.className = 'msg ok';
+            await loadSites();
+        } catch (err) {
+            msg.textContent = 'Could not reach the server.';
+            msg.className = 'msg error';
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ---- Raise a service request ----
+    document.getElementById('raiseForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('raiseMsg');
+        const btn = document.getElementById('raiseBtn');
+        msg.className = 'msg';
+        btn.disabled = true;
+        btn.textContent = 'Submitting…';
+
+        try {
+            const res = await authFetch('/api/customer/work-orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    siteId: Number(document.getElementById('siteSelect').value),
+                    title: document.getElementById('woTitle').value.trim(),
+                    description: document.getElementById('woDescription').value.trim(),
+                    priority: document.getElementById('woPriority').value
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                msg.textContent = data.message || 'Could not raise the request';
+                msg.className = 'msg error';
+                return;
+            }
+            document.getElementById('raiseForm').reset();
+            document.getElementById('woPriority').value = 'MEDIUM';
+            msg.textContent = `Request ${data.code} raised.`;
+            msg.className = 'msg ok';
+            await loadWorkOrders();
+        } catch (err) {
+            msg.textContent = 'Could not reach the server.';
+            msg.className = 'msg error';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Submit request';
+        }
+    });
+
+    // ---- Work orders ----
+    async function loadWorkOrders() {
+        const wrap = document.getElementById('woListWrap');
+        const res = await authFetch('/api/customer/work-orders');
+        const orders = await res.json();
+
+        if (orders.length === 0) {
+            wrap.innerHTML = '<div class="empty-note">No work orders yet. Raise a service request above to create one.</div>';
+            return;
+        }
+
+        wrap.innerHTML = `
+            <table class="wo-table">
+                <thead>
+                    <tr><th>Code</th><th>Title</th><th>Site</th><th>Priority</th><th>Status</th><th>SLA due</th><th>Technician</th></tr>
+                </thead>
+                <tbody>
+                    ${orders.map(o => `
+                        <tr class="wo-row" data-id="${o.id}">
+                            <td>${escapeHtml(o.code)}</td>
+                            <td>${escapeHtml(o.title)}</td>
+                            <td>${escapeHtml(o.siteName)}</td>
+                            <td>${badge('priority', o.priority)}</td>
+                            <td>${badge('status', o.status)}</td>
+                            <td>${fmtDate(o.slaDueAt)}</td>
+                            <td>${o.assignedTechnician ? escapeHtml(o.assignedTechnician) : 'Unassigned'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+
+        wrap.querySelectorAll('.wo-row').forEach(row => {
+            row.addEventListener('click', () => openDetail(row.dataset.id));
+        });
+    }
+
+    async function openDetail(id) {
+        const overlay = document.getElementById('detailOverlay');
+        const content = document.getElementById('detailContent');
+        content.innerHTML = '<div class="empty-note">Loading…</div>';
+        overlay.classList.add('open');
+
+        try {
+            const res = await authFetch('/api/customer/work-orders/' + id);
+            if (!res.ok) {
+                content.innerHTML = '<div class="empty-note">Could not load this work order.</div>';
+                return;
+            }
+            const wo = await res.json();
+            content.innerHTML = `
+                <div class="label">${escapeHtml(wo.code)}</div>
+                <h2 style="margin:4px 0 4px;">${escapeHtml(wo.title)}</h2>
+                <div style="margin-bottom:14px;">${badge('priority', wo.priority)} &nbsp; ${badge('status', wo.status)}</div>
+                <dl class="kv">
+                    <dt>Site</dt><dd>${escapeHtml(wo.siteName)}</dd>
+                    <dt>SLA due</dt><dd>${fmtDate(wo.slaDueAt)}</dd>
+                    <dt>Technician</dt><dd>${wo.assignedTechnician ? escapeHtml(wo.assignedTechnician) : 'Unassigned'}</dd>
+                    <dt>Raised</dt><dd>${fmtDate(wo.createdAt)}</dd>
+                </dl>
+                ${wo.description ? `<p style="margin-top:16px;color:var(--text-dim);">${escapeHtml(wo.description)}</p>` : ''}
+                <div class="section-title">History</div>
+                ${wo.history.map(h => `
+                    <div class="history-item">
+                        <div class="h-time">${fmtDate(h.changedAt)}</div>
+                        <div>${h.fromStatus ? STATUS_LABEL[h.fromStatus] + ' → ' : ''}${STATUS_LABEL[h.toStatus]}</div>
+                        ${h.note ? `<div style="color:var(--text-dim);">${escapeHtml(h.note)}</div>` : ''}
+                    </div>
+                `).join('')}
+            `;
+        } catch (err) {
+            content.innerHTML = '<div class="empty-note">Could not load this work order.</div>';
+        }
+    }
+
+    document.getElementById('closeDetail').addEventListener('click', () => {
+        document.getElementById('detailOverlay').classList.remove('open');
+    });
+    document.getElementById('detailOverlay').addEventListener('click', (e) => {
+        if (e.target.id === 'detailOverlay') e.target.classList.remove('open');
+    });
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    (async () => {
+        await loadSites();
+        await loadWorkOrders();
+    })();
+</script>
+
+</body>
+</html>

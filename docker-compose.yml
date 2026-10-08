@@ -1,0 +1,49 @@
+# Local development stack: PostgreSQL + Spring Boot backend + nginx-served React frontend.
+#   cp .env.example .env     (then edit JWT_SECRET / DB_PASSWORD)
+#   docker compose up --build
+# Frontend: http://localhost:3000   Backend: http://localhost:8080   Swagger: http://localhost:8080/swagger-ui.html
+# NOT a production configuration (see README "Docker").
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-authapp_db}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - keystone-pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-authapp_db}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET:-docker-local-dev-only-secret-change-me-at-least-32-bytes-long}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      JPA_DDL_AUTO: validate
+      FLYWAY_ENABLED: "true"
+      SLA_SCHEDULER_ENABLED: ${SLA_SCHEDULER_ENABLED:-true}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+
+volumes:
+  keystone-pgdata:
