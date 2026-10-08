@@ -95,3 +95,65 @@ test('note and blankToNull helpers', () => {
   assert.equal(blankToNull('   '), null);
   assert.equal(blankToNull('  hi '), 'hi');
 });
+
+// ---- Sign in / Sign up ----
+import { buildSignupPayload, mapSignupError, validateLogin, validateSignup } from './validation';
+import type { SignupForm } from './validation';
+
+const okSignup: SignupForm = {
+  fullName: 'Asha Rao',
+  email: 'asha@example.com',
+  password: 'secret1',
+  confirmPassword: 'secret1',
+  role: 'TECHNICIAN',
+  companyName: '',
+};
+
+test('login requires email and password only', () => {
+  assert.deepEqual(validateLogin({ email: 'a@b.co', password: 'x' }), {});
+  assert.deepEqual(Object.keys(validateLogin({ email: ' ', password: '' })).sort(), ['email', 'password']);
+});
+
+test('valid signup passes for every non-customer role', () => {
+  for (const role of ['MANAGER', 'DISPATCHER', 'TECHNICIAN']) {
+    assert.deepEqual(validateSignup({ ...okSignup, role }), {});
+  }
+});
+
+test('signup: required fields, invalid email, short password, mismatch', () => {
+  const empty = validateSignup({ fullName: '', email: '', password: '', confirmPassword: '', role: '', companyName: '' });
+  assert.deepEqual(Object.keys(empty).sort(), ['confirmPassword', 'email', 'fullName', 'password', 'role']);
+  assert.equal(validateSignup({ ...okSignup, email: 'not-an-email' }).email, 'Enter a valid email address');
+  assert.equal(validateSignup({ ...okSignup, email: 'a@b' }).email, 'Enter a valid email address');
+  assert.match(validateSignup({ ...okSignup, password: '12345', confirmPassword: '12345' }).password ?? '', /at least 6/);
+  assert.equal(validateSignup({ ...okSignup, confirmPassword: 'secret2' }).confirmPassword, 'Passwords do not match');
+  assert.ok(validateSignup({ ...okSignup, password: 'x'.repeat(73), confirmPassword: 'x'.repeat(73) }).password);
+  assert.ok(validateSignup({ ...okSignup, fullName: 'n'.repeat(101) }).fullName);
+});
+
+test('signup: company name is required only for CUSTOMER', () => {
+  assert.equal(validateSignup({ ...okSignup, role: 'CUSTOMER', companyName: '  ' }).companyName, 'Company name is required');
+  assert.deepEqual(validateSignup({ ...okSignup, role: 'CUSTOMER', companyName: 'Acme Ltd' }), {});
+  assert.equal(validateSignup({ ...okSignup, role: 'TECHNICIAN', companyName: '' }).companyName, undefined);
+  assert.ok(validateSignup({ ...okSignup, role: 'CUSTOMER', companyName: 'c'.repeat(151) }).companyName);
+});
+
+test('signup payload: trimmed, confirm password never sent, companyName only for CUSTOMER', () => {
+  const p = buildSignupPayload({ ...okSignup, fullName: ' Asha ', email: ' asha@example.com ', companyName: 'ignored' });
+  assert.deepEqual(p, { fullName: 'Asha', email: 'asha@example.com', password: 'secret1', role: 'TECHNICIAN' });
+  const c = buildSignupPayload({ ...okSignup, role: 'CUSTOMER', companyName: ' Acme ' });
+  assert.equal(c.companyName, 'Acme');
+  assert.equal('confirmPassword' in c, false);
+});
+
+test('backend signup errors map to the right field', () => {
+  assert.deepEqual(mapSignupError('email: Email must be valid'), { fieldErrors: { email: 'Email must be valid' }, banner: null });
+  assert.deepEqual(mapSignupError('password: Password must be at least 6 characters').fieldErrors, {
+    password: 'Password must be at least 6 characters',
+  });
+  const dup = mapSignupError('An account with this email already exists');
+  assert.equal(dup.fieldErrors.email, 'An account with this email already exists');
+  assert.equal(dup.banner, 'An account with this email already exists');
+  assert.ok(mapSignupError('Company name is required for a customer account').fieldErrors.companyName);
+  assert.deepEqual(mapSignupError('Cannot reach the server.'), { fieldErrors: {}, banner: 'Cannot reach the server.' });
+});

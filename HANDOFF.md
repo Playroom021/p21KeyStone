@@ -1,3 +1,89 @@
+# KEYSTONE — Sign In + Sign Up (frontend, end-to-end wiring)
+
+Scope: `/login` improved, new `/signup`, both wired to the **existing** `POST /api/auth/login` and
+`POST /api/auth/signup`. **No backend file, migration, security rule or backend test was touched.** No unrelated features.
+
+## ⚠️ Read this first: what was and was NOT verified
+
+The sandbox has no npm registry access (`npm install` → **403**), no Maven and no PostgreSQL, so:
+
+| Requested check | Status |
+|---|---|
+| `npm run build` | **NOT RUN** (dependencies cannot be installed) |
+| Login / signup / duplicate email / logout / protected routes / role redirect against the real backend or in a browser | **NOT RUN** |
+| Unit tests (`npm test`) | **Run: 35/35 pass** (29 existing + 6 new covering the signup/login rules and backend-error mapping) |
+| Type-check | **Partial**: `tsc --strict --noUnusedLocals` over all of `src/` against throw-away stand-in typings for react / react-router-dom / axios (not shipped). The only remaining diagnostics are artefacts of those loose stand-ins (implicit-`any` on `onChange` handlers, missing `useRef`, `./index.css` import). Nothing that points at a real error in the new code, but this is **not** a substitute for the real compiler |
+
+**First action next time:** `cd frontend && npm install && npm run build && npm test`, fix whatever the real compiler
+reports, then run the manual checklist in §4 against the running backend.
+
+## 1. Changes (all under `frontend/src/`)
+
+| File | Change |
+|---|---|
+| `pages/SignUpPage.tsx` | **New.** Full name, Email, Password, Confirm password, Role, Company name (rendered only when CUSTOMER). Per-field errors, backend errors, double-submit guard, redirects to the role dashboard on success. Already signed in → redirected away |
+| `pages/LoginPage.tsx` | Improved (not replaced): same `from`-aware redirect, now uses the shared `Field`/`Alert` components, inline required-field errors, Show/Hide password, "Create an account" link to `/signup`, submit no longer silently disabled |
+| `components/PasswordInput.tsx` | **New.** Password input with Show/Hide toggle |
+| `App.tsx` | Added public route `/signup` (next to `/login`). Everything else is still under `ProtectedRoute` → `RoleRoute` |
+| `auth/AuthContext.tsx` | Added `signup()`. Login and signup now share one `startSession()` so both store token + user identically (`saveSession`) and set the user |
+| `api/auth.ts` | Added `signupRequest()` → `POST /api/auth/signup` |
+| `api/client.ts` | Token is no longer attached to `/api/auth/login` and `/api/auth/signup` (a stale token could otherwise trigger the 401 "session dead" handler on a wrong password). Added `getErrorStatus()` |
+| `lib/validation.ts` | Added `validateLogin`, `validateSignup`, `buildSignupPayload`, `mapSignupError` |
+| `types/auth.ts` | Added `SignupPayload` |
+| `index.css` | Added `.auth-card`, `.auth-grid` (2 columns, 1 column ≤520 px), `.pw-wrap`, `.auth-switch`. Existing styles untouched |
+| `lib/validation.test.ts` | +6 tests |
+
+## 2. Rules and behaviour
+
+* **Signup validation** (mirrors `SignupRequest` + column lengths): full name required ≤100; email required, valid format, ≤150;
+  password ≥6 (backend `@Size(min = 6)`) and ≤72 bytes (BCrypt limit); confirm must match; role required (one of the 4);
+  company name required ≤150 **only when CUSTOMER** (and only sent for CUSTOMER). `confirmPassword` is never sent.
+* **Backend errors shown**: `400 "field: message"` is placed under that field; `409 "An account with this email already exists"`
+  appears under Email and as a banner; `Company name is required…` under Company name; network failure → "Cannot reach the server…".
+* **Login**: wrong credentials show the backend's `Invalid email or password` (401). Login only checks that fields are non-empty
+  (the backend decides validity, so unusual legacy emails still work).
+* **After signup**: JWT + user saved exactly like login, then `postLoginPath(role)` → `/manager`, `/dispatcher`, `/technician`, `/customer`.
+* **Protected routes / logout** unchanged: `ProtectedRoute` sends unauthenticated users to `/login` (remembering the page they wanted),
+  `RoleRoute` sends wrong-role users to `/unauthorized`, logout calls `POST /api/auth/logout` (token blacklisted) and clears storage,
+  a 401 on any authenticated call ends the session.
+
+## 3. Backend observations (NOT changed, per instructions)
+
+1. **Anyone can self-register as MANAGER** (or DISPATCHER/TECHNICIAN): `SignupRequest.role` is accepted as sent. The signup form
+   offers all four roles because that was requested, but this is a real privilege-escalation risk for production. Recommended
+   follow-up: restrict public signup to CUSTOMER, or require an invite/approval for staff roles.
+2. `AuthController.signup` maps every `IllegalArgumentException` to **409** (including the missing-company-name case, which is really a 400). The frontend handles both by message, so it works either way.
+3. `AuthService.signup` is not `@Transactional`: the Customer row is saved before the User, so a failing user insert (e.g. a race on the
+   unique email) can leave an orphan customer.
+4. Email matching is case-sensitive and the backend does not trim; the frontend trims but does not lowercase (so existing mixed-case accounts still log in).
+5. `/api/auth/signup` allows unlimited anonymous requests (no rate limiting).
+
+## 4. Manual checklist to run (not yet done)
+
+Start backend + `npm run dev`, then:
+
+- [ ] `/signup` → create TECHNICIAN with valid data → lands on `/technician/jobs`; token + user in localStorage
+- [ ] Sign up MANAGER, DISPATCHER → `/manager`, `/dispatcher/work-orders`
+- [ ] Sign up CUSTOMER: company field appears only for CUSTOMER; empty company → "Company name is required"; valid → `/customer/work-orders`
+- [ ] Same email again → "An account with this email already exists" under Email + banner
+- [ ] `abc`, `a@b` → "Enter a valid email address" (no request sent)
+- [ ] Password `12345` → "Password must be at least 6 characters"; mismatch → "Passwords do not match"
+- [ ] Sign in with each created user → correct dashboard; wrong password → "Invalid email or password"
+- [ ] Log out → back at `/login`; browser Back / typing `/manager` → redirected to `/login`; old token rejected (blacklisted)
+- [ ] Signed in as TECHNICIAN open `/manager` → `/unauthorized`; open `/login` or `/signup` while signed in → bounced to own dashboard
+- [ ] Phone width (~390 px): both pages single column, no horizontal scroll; ≥520 px: password/confirm side by side
+
+## 5. Commands
+
+```
+cd frontend
+npm install
+npm run build     # tsc -b && vite build   (NOT RUN here)
+npm test          # tsx --test             (35/35 pass here)
+```
+
+---
+
 # KEYSTONE — Step 9 Handoff (React frontend UI for all four roles)
 
 Starting point: `KEYSTONE_CHECKPOINT_08.zip`. Scope: real pages for MANAGER, DISPATCHER, TECHNICIAN and CUSTOMER on top

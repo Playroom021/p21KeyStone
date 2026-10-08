@@ -1,3 +1,5 @@
+import { ROLES } from '../types/auth';
+import type { Role, SignupPayload } from '../types/auth';
 import { PRIORITIES } from '../types/domain';
 
 /** Field name -> message. Empty object = valid. Limits mirror the backend DTO annotations. */
@@ -155,4 +157,83 @@ export function validateTimeLog(f: TimeLogForm, now: Date = new Date()): FieldEr
 // ---- Free-text note on a status change ----
 export function validateNote(note: string): string | null {
   return optionalMax(note, 'Note', 500);
+}
+
+// ---- Sign in / Sign up ----
+export interface LoginForm {
+  email: string;
+  password: string;
+}
+/** Sign in only checks presence: the backend decides whether the credentials are right. */
+export function validateLogin(f: LoginForm): FieldErrors {
+  const e: FieldErrors = {};
+  if (!f.email.trim()) e.email = 'Email is required';
+  if (!f.password) e.password = 'Password is required';
+  return e;
+}
+
+export interface SignupForm {
+  fullName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  role: string;
+  companyName: string;
+}
+/** Backend: @Size(min = 6) on password; BCrypt only uses the first 72 bytes. */
+export const PASSWORD_MIN = 6;
+export const PASSWORD_MAX_BYTES = 72;
+
+const byteLength = (v: string): number => new TextEncoder().encode(v).length;
+
+/** Limits mirror SignupRequest + the app_users / customers column lengths. */
+export function validateSignup(f: SignupForm): FieldErrors {
+  const e: FieldErrors = {};
+  put(e, 'fullName', required(f.fullName, 'Full name', 100));
+
+  const email = f.email.trim();
+  if (!email) e.email = 'Email is required';
+  else if (email.length > 150) e.email = 'Email must be at most 150 characters';
+  else if (!EMAIL_RE.test(email)) e.email = 'Enter a valid email address';
+
+  if (!f.password) e.password = 'Password is required';
+  else if (f.password.length < PASSWORD_MIN) e.password = `Password must be at least ${PASSWORD_MIN} characters`;
+  else if (byteLength(f.password) > PASSWORD_MAX_BYTES) e.password = `Password is too long (max ${PASSWORD_MAX_BYTES} bytes)`;
+
+  if (!f.confirmPassword) e.confirmPassword = 'Confirm your password';
+  else if (f.confirmPassword !== f.password) e.confirmPassword = 'Passwords do not match';
+
+  if (!(ROLES as readonly string[]).includes(f.role)) e.role = 'Choose a role';
+  else if (f.role === 'CUSTOMER') put(e, 'companyName', required(f.companyName, 'Company name', 150));
+
+  return e;
+}
+
+/** Request body for POST /api/auth/signup; companyName is only sent for CUSTOMER. */
+export function buildSignupPayload(f: SignupForm): SignupPayload {
+  const payload: SignupPayload = {
+    fullName: f.fullName.trim(),
+    email: f.email.trim(),
+    password: f.password,
+    role: f.role as Role,
+  };
+  if (f.role === 'CUSTOMER') payload.companyName = f.companyName.trim();
+  return payload;
+}
+
+const SIGNUP_FIELDS = ['fullName', 'email', 'password', 'role', 'companyName'];
+
+/**
+ * Turn a backend signup error into field errors + an optional banner.
+ *  - 400 validation arrives as "field: message"  -> shown under that field
+ *  - 409 "An account with this email already exists" -> under Email
+ *  - 409 "Company name is required ..." -> under Company name
+ *  - anything else -> banner only
+ */
+export function mapSignupError(message: string): { fieldErrors: FieldErrors; banner: string | null } {
+  const m = /^(\w+):\s*(.+)$/.exec(message);
+  if (m && SIGNUP_FIELDS.includes(m[1])) return { fieldErrors: { [m[1]]: m[2] }, banner: null };
+  if (/email already exists/i.test(message)) return { fieldErrors: { email: message }, banner: message };
+  if (/company name/i.test(message)) return { fieldErrors: { companyName: message }, banner: null };
+  return { fieldErrors: {}, banner: message };
 }
