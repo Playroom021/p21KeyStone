@@ -1,7 +1,7 @@
 export const ROLES = ['MANAGER', 'DISPATCHER', 'TECHNICIAN', 'CUSTOMER'] as const;
 export type Role = (typeof ROLES)[number];
 
-/** Response body of POST /api/auth/login (AuthResponse on the backend). */
+/** Response body of POST /api/auth/login and /api/auth/signup (AuthResponse on the backend). */
 export interface AuthResponse {
   token: string;
   id: number;
@@ -18,4 +18,14 @@ export interface AuthUser {
   email: string;
   role: Role;
   companyName: string | null;
+}
+
+/** Request body of POST /api/auth/signup (SignupRequest on the backend). */
+export interface SignupPayload {
+  fullName: string;
+  email: string;
+  password: string;
+  role: Role;
+  /** Required by the backend only when role is CUSTOMER. */
+  companyName?: string;
 }

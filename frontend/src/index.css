@@ -27,6 +27,18 @@ a { color: var(--brand); }
 .login-card label { font-size: 0.85rem; font-weight: 600; margin-top: 0.5rem; }
 .login-card input { padding: 0.55rem 0.7rem; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; }
 .login-card .btn { margin-top: 0.75rem; }
+.auth-card { width: 100%; max-width: 440px; margin: 0; }
+.auth-card h1 { margin: 0; text-align: center; }
+.auth-card .muted { margin: 0 0 0.5rem; text-align: center; }
+.auth-card .field { margin-bottom: 0.6rem; }
+.auth-card .field > label { margin-top: 0; }
+.auth-card .btn { margin-top: 0.5rem; }
+.auth-switch { margin: 0.75rem 0 0; text-align: center; font-size: 0.9rem; color: #6b7280; }
+.auth-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.75rem; }
+.pw-wrap { position: relative; display: flex; }
+.pw-wrap input { padding-right: 4.2rem; }
+.pw-toggle { position: absolute; right: 0.35rem; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--brand); font-size: 0.85rem; cursor: pointer; padding: 0.35rem 0.5rem; }
+@media (max-width: 520px) { .auth-grid { grid-template-columns: 1fr; } .auth-card { padding: 1rem; } }
 
 /* ---- Buttons ---- */
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.55rem 1rem; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; font-size: 1rem; line-height: 1.2; text-decoration: none; cursor: pointer; }

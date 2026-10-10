@@ -13,9 +13,13 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+/** Public endpoints: never send a (possibly stale) token to them. */
+const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/signup'];
+
 api.interceptors.request.use((config) => {
   const token = getToken();
-  if (token) {
+  const isPublic = PUBLIC_PATHS.some((p) => config.url?.startsWith(p));
+  if (token && !isPublic) {
     config.headers.set('Authorization', `Bearer ${token}`);
   }
   return config;
@@ -50,4 +54,9 @@ export function getErrorMessage(error: unknown, fallback = 'Something went wrong
     if (error.response.status === 403) return 'You do not have permission to do that.';
   }
   return fallback;
+}
+
+/** HTTP status of a failed request, or null when there was no response (network error). */
+export function getErrorStatus(error: unknown): number | null {
+  return axios.isAxiosError(error) ? (error.response?.status ?? null) : null;
 }
