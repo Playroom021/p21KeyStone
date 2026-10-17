@@ -1,8 +1,14 @@
 import { api } from './client';
-import type { AuthResponse, AuthUser } from '../types/auth';
+import type { AuthResponse, AuthUser, SignupPayload } from '../types/auth';
 
 export async function loginRequest(email: string, password: string): Promise<AuthResponse> {
   const { data } = await api.post<AuthResponse>('/api/auth/login', { email, password });
+  return data;
+}
+
+/** POST /api/auth/signup - answers 201 with the same body as login (token + user). */
+export async function signupRequest(payload: SignupPayload): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>('/api/auth/signup', payload);
   return data;
 }
 

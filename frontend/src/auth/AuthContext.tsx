@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { fetchMe, loginRequest, logoutRequest } from '../api/auth';
+import { fetchMe, loginRequest, logoutRequest, signupRequest } from '../api/auth';
 import {
   TOKEN_KEY,
   UNAUTHORIZED_EVENT,
@@ -9,7 +9,7 @@ import {
   getToken,
   saveSession,
 } from './storage';
-import type { AuthUser } from '../types/auth';
+import type { AuthResponse, AuthUser, SignupPayload } from '../types/auth';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -17,6 +17,8 @@ interface AuthContextValue {
   /** True until a stored session has been checked against the backend. */
   isInitializing: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
+  /** POST /api/auth/signup, then stores the returned session exactly like login. */
+  signup: (payload: SignupPayload) => Promise<AuthUser>;
   logout: () => Promise<void>;
 }
 
@@ -71,8 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await loginRequest(email, password);
+  /** Store the token + user returned by login or signup and make them the current session. */
+  const startSession = useCallback((res: AuthResponse): AuthUser => {
     const nextUser: AuthUser = {
       id: res.id,
       fullName: res.fullName,
@@ -86,6 +88,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return nextUser;
   }, []);
 
+  const login = useCallback(
+    async (email: string, password: string) => startSession(await loginRequest(email, password)),
+    [startSession],
+  );
+
+  const signup = useCallback(
+    async (payload: SignupPayload) => startSession(await signupRequest(payload)),
+    [startSession],
+  );
+
   const logout = useCallback(async () => {
     try {
       // Blacklists the token server-side. Sent while the token is still stored.
@@ -98,8 +110,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: user !== null, isInitializing, login, logout }),
-    [user, isInitializing, login, logout],
+    () => ({ user, isAuthenticated: user !== null, isInitializing, login, signup, logout }),
+    [user, isInitializing, login, signup, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

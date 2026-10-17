@@ -5,6 +5,7 @@ import RoleRoute from './components/RoleRoute';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import RootRedirect from './pages/RootRedirect';
+import SignUpPage from './pages/SignUpPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 import MyWorkOrderDetailPage from './pages/customer/MyWorkOrderDetailPage';
 import MySitesPage from './pages/customer/MySitesPage';
@@ -34,6 +35,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<SignUpPage />} />
       <Route path="/" element={<RootRedirect />} />
 
       {/* Everything below requires a signed-in user */}
